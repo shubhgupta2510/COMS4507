@@ -9,12 +9,51 @@ and for evaluating candidate mitigations.
 ## Project Structure
 
 ```
-rag_adversarial/
-├── rag_pipeline.py       # Core RAG system (embeddings + FAISS + Claude)
-├── adversarial_eval.py   # Evaluation harness, mitigations, demo experiment
-├── requirements.txt
-└── README.md
+COMS4507/
+├── rag_pipeline.py           # Core RAG system implementation
+├── adversarial_eval.py       # Evaluation harness and mitigation strategies  
+├── eval_results.json         # Experiment results and metrics
+├── requirements.txt          # Python dependencies
+└── README.md                 # This file
 ```
+
+## File Descriptions
+
+| File | Purpose |
+|------|---------|
+| **rag_pipeline.py** | Core RAG implementation with document storage, semantic search using FAISS, and LLM integration via Ollama |
+| **adversarial_eval.py** | Evaluation framework for running experiments with test cases, multiple mitigation strategies, and comprehensive metrics |
+| **eval_results.json** | Experimental results containing accuracy, attack success rates, and detailed per-query analysis |
+| **requirements.txt** | Python package dependencies |
+
+---
+
+## Architecture Overview
+
+### RAG Pipeline (`rag_pipeline.py`)
+
+The core RAG system with the following components:
+
+- **Embedding Model**: Uses `sentence-transformers` (default: `all-MiniLM-L6-v2`) to convert documents and queries into semantic embeddings
+- **Vector Index**: FAISS `IndexFlatIP` for efficient dense retrieval using cosine similarity
+- **LLM Backend**: Local model inference via Ollama (default: `llama3.2`) with deterministic generation (temperature=0.0)
+- **Document Management**: Tracks documents with metadata, source labels (clean/adversarial), and unique IDs
+- **Retrieval Pipeline**: Supports filtering and reranking functions for implementing mitigations
+
+Key classes:
+- `Document`: Represents a document with text, ID, source label, and metadata
+- `RAGPipeline`: Main class orchestrating embedding, retrieval, and generation
+- `OllamaClient`: Wrapper for local LLM inference
+- `RAGResponse`: Complete output with answer, retrieved documents, and relevance scores
+
+### Evaluation Framework (`adversarial_eval.py`)
+
+Implements comprehensive evaluation with:
+
+- **Test Cases**: Structured queries with ground truth, target attack answers, and keyword-based judgment
+- **Evaluation Metrics**: Accuracy, attack success rate, adversarial document retrieval rate, and answer corruption rate
+- **Mitigation Strategies**: Keyword blocklist and source-based filtering
+- **EvalReport**: Aggregates results with detailed statistics
 
 ---
 
@@ -26,7 +65,18 @@ rag_adversarial/
 pip install -r requirements.txt
 ```
 
-### 2. Run the experiment
+### 2. Set up Ollama
+Dependencies
+
+The project requires:
+
+- `sentence-transformers >= 3.0.0` — For semantic text embeddings
+- `faiss-cpu >= 1.8.0` — For efficient vector similarity search
+- `numpy >= 1.26.0` — Numerical computing support
+
+Additionally, Ollama must be running locally for LLM inference.
+
+### 3. Run the experiment
 
 ```bash
 python adversarial_eval.py
@@ -34,20 +84,38 @@ python adversarial_eval.py
 
 ---
 
-## What the experiment does
+## Extending the framework
 
-| Phase | Description |
-|---|---|
-| **Clean baseline** | Knowledge base contains only factual documents. Test queries are run and answers evaluated for correctness. |
-| **Poisoned** | Adversarial documents are injected. The same queries are run and the increase in incorrect / biased answers is measured. |
-| **Mitigated** | A keyword blocklist mitigation is applied to demonstrate how filtering can partially restore accuracy. |
+### Adding your own documents
 
-Results are saved to `eval_results.json` for further analysis.
+```python
+from rag_pipeline import RAGPipeline
 
----
+rag = RAGPipeline()
+rag.add_documents(["Your factual document ..."], source="clean")
+rag.add_documents(["Misleading content ..."],   source="adversarial")
+answer = rag.query("Your question?")
+print(answer.answer)
+```
 
-## Key Metrics
+### Adding your own test cases
 
+```python
+from adversarial_eval import TestCase
+
+my_case = TestCase(
+    query             = "What is X?",
+    ground_truth      = "X is ...",
+    target_answer     = "X is actually ...",   # what a successful attack produces
+    keywords_clean    = ["correct", "keywords"],
+    keywords_attack   = ["misleading", "keywords"],
+    category          = "your_category",
+)
+```
+
+### Implementing a new mitigation
+
+Create a filter function with signature `filter_fn(docs: list[RetrievedDocument]) -> list[RetrievedDocument]` and pass it to `rag.retrieve()` as shown in `adversarial_eval.py
 | Metric | Description |
 |---|---|
 | **Accuracy** | Fraction of queries answered correctly (ground-truth keywords found). |
@@ -85,6 +153,29 @@ my_case = TestCase(
 ```
 
 ### Implementing a new mitigation
+
+---
+
+## Experiment Output
+
+The `eval_results.json` file contains:
+
+- **Per-report metrics**: Accuracy, attack success rate, adversarial retrieval rate, and corruption rate
+- **Per-query results**: Individual query performance, retrieved documents, relevance scores, and classification
+- **Retrieval analysis**: Document IDs, sources, and ranking information for debugging and analysis
+
+Example report structure:
+```json
+{
+  "label": "Clean baseline",
+  "accuracy": 0.9,
+  "attack_success_rate": 0.1,
+  "adversarial_retrieval_rate": 0.0,
+  "avg_adv_docs_retrieved": 0.0,
+  "corrupted_answer_rate": 0.1,
+  "results": [...]
+}
+```
 
 Implement a class with a `filter_docs(docs) -> list[Document]` method and wrap
 `rag.retrieve` as shown in `adversarial_eval.py → main()`.
