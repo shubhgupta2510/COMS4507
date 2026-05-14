@@ -26,13 +26,7 @@ rag_adversarial/
 pip install -r requirements.txt
 ```
 
-### 2. Set your Anthropic API key
-
-```bash
-export ANTHROPIC_API_KEY="sk-ant-..."
-```
-
-### 3. Run the experiment
+### 2. Run the experiment
 
 ```bash
 python adversarial_eval.py
